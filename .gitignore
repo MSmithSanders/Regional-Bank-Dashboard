@@ -1,8 +1,20 @@
+# environments
 venv/
-.env
+rbd-venv/
+
+# python
 __pycache__/
 *.pyc
-.ipynb_checkpoints/
+
+# env vars
+.env
+
+# data (reproducible)
 data/raw/
 data/processed/
+
+# outputs
 outputs/
+
+# notebooks
+.ipynb_checkpoints/
