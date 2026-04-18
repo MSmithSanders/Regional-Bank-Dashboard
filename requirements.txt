@@ -1,0 +1,11 @@
+pandas
+numpy
+requests
+python-dotenv
+yfinance
+plotly
+streamlit
+duckdb
+sqlalchemy
+tqdm
+jupyter
