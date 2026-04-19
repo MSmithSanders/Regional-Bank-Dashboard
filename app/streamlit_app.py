@@ -127,6 +127,31 @@ def build_latest_table(df: pd.DataFrame, as_of_date: pd.Timestamp) -> pd.DataFra
     return latest_df
 
 
+def build_component_table(bank_snapshot: pd.DataFrame) -> pd.DataFrame:
+    component_map = [
+        ("ROA percentile", "roa_calc_pct", 0.4),
+        ("ROE percentile", "roe_calc_pct", 0.3),
+        ("Equity / Assets percentile", "equity_to_assets_pct", 0.2),
+        ("Loan / Deposit percentile", "loan_to_deposit_pct", 0.1),
+    ]
+
+    rows = []
+    for label, col, weight in component_map:
+        if col in bank_snapshot.columns:
+            raw_value = bank_snapshot.iloc[0][col]
+            weighted_value = raw_value * weight if pd.notna(raw_value) else np.nan
+            rows.append(
+                {
+                    "Component": label,
+                    "Percentile": round(raw_value, 3) if pd.notna(raw_value) else np.nan,
+                    "Weight": weight,
+                    "Weighted Contribution": round(weighted_value, 3) if pd.notna(weighted_value) else np.nan,
+                }
+            )
+
+    return pd.DataFrame(rows)
+
+
 def main() -> None:
     st.title("Regional Bank Peer Dashboard")
     st.caption("FDIC-based peer comparison dashboard for IAT regional bank constituents")
@@ -242,6 +267,56 @@ def main() -> None:
         else:
             st.info("Required columns for the scatter plot are not available.")
 
+    st.subheader("Score component breakdown")
+    score_component_col1, score_component_col2 = st.columns([1, 2])
+
+    with score_component_col1:
+        component_bank = st.selectbox(
+            "Select bank for score breakdown",
+            options=available_tickers,
+            key="component_bank",
+        )
+        component_snapshot = snapshot_df[snapshot_df["Ticker"] == component_bank].copy()
+
+        if not component_snapshot.empty:
+            component_table = build_component_table(component_snapshot)
+            st.dataframe(component_table, use_container_width=True, hide_index=True)
+
+            if "composite_score" in component_snapshot.columns:
+                st.metric(
+                    "Composite score",
+                    f"{component_snapshot.iloc[0]['composite_score']:.3f}",
+                )
+            if "score_rolling_4q" in component_snapshot.columns and pd.notna(component_snapshot.iloc[0]["score_rolling_4q"]):
+                st.metric(
+                    "Rolling 4Q score",
+                    f"{component_snapshot.iloc[0]['score_rolling_4q']:.3f}",
+                )
+        else:
+            st.info("No snapshot data available for the selected bank.")
+
+    with score_component_col2:
+        if not component_snapshot.empty:
+            component_table = build_component_table(component_snapshot)
+            if not component_table.empty:
+                fig_component = px.bar(
+                    component_table,
+                    x="Component",
+                    y="Weighted Contribution",
+                    hover_data=["Percentile", "Weight"],
+                    title=f"{component_bank} Score Contribution Breakdown",
+                )
+                fig_component.update_layout(
+                    xaxis_title="Score component",
+                    yaxis_title="Weighted contribution",
+                    xaxis_tickangle=-20,
+                )
+                st.plotly_chart(fig_component, use_container_width=True)
+            else:
+                st.info("Score component columns are not available in the dataset.")
+        else:
+            st.info("No score component data available.")
+
     st.subheader("Bank history")
     selected_bank = st.selectbox("Select bank", options=available_tickers)
     bank_df = filtered_df[filtered_df["Ticker"] == selected_bank].sort_values("REPDTE").copy()
@@ -306,84 +381,79 @@ def main() -> None:
         else:
             st.info("Selected metric history unavailable.")
 
-# Peer comparison panel 
-
     st.subheader("Peer comparison")
 
-    col1, col2 = st.columns(2)
+    peer_col1, peer_col2 = st.columns(2)
 
-    with col1:
+    with peer_col1:
         focus_bank = st.selectbox(
             "Select focus bank",
             options=available_tickers,
             key="focus_bank",
         )
 
-    with col2:
+    with peer_col2:
         peer_banks = st.multiselect(
             "Select peers",
             options=[t for t in available_tickers if t != focus_bank],
             default=[t for t in available_tickers if t != focus_bank][:4],
+            key="peer_banks",
         )
 
     compare_tickers = [focus_bank] + peer_banks
-
-    compare_df = snapshot_df[
-        snapshot_df["Ticker"].isin(compare_tickers)
-    ].copy()
-
+    compare_df = snapshot_df[snapshot_df["Ticker"].isin(compare_tickers)].copy()
     compare_df["is_focus"] = compare_df["Ticker"] == focus_bank
 
     metric_options = {
-    "ROA (%)": "roa_calc_pct_display",
-    "ROE (%)": "roe_calc_pct_display",
-    "Equity / Assets (%)": "equity_to_assets_pct_display",
-    "Loan / Deposit": "loan_to_deposit",
-    "Composite Score": "composite_score",
-    "Rolling 4Q Score": "score_rolling_4q",
+        "ROA (%)": "roa_calc_pct_display",
+        "ROE (%)": "roe_calc_pct_display",
+        "Equity / Assets (%)": "equity_to_assets_pct_display",
+        "Loan / Deposit": "loan_to_deposit",
+        "Composite Score": "composite_score",
+        "Rolling 4Q Score": "score_rolling_4q",
+    }
+    available_metric_options = {
+        label: col for label, col in metric_options.items() if col in compare_df.columns
     }
 
     selected_metric = st.radio(
         "Comparison metric",
-        options=list(metric_options.keys()),
+        options=list(available_metric_options.keys()),
         horizontal=True,
+        key="peer_metric_choice",
     )
+    metric_col = available_metric_options[selected_metric]
 
-    metric_col = metric_options[selected_metric]
+    if not compare_df.empty:
+        compare_df = compare_df.sort_values(metric_col, ascending=False)
+        fig_peer = px.bar(
+            compare_df,
+            x="Ticker",
+            y=metric_col,
+            color="is_focus",
+            hover_data=[c for c in ["Holding_Company_Name"] if c in compare_df.columns],
+            color_discrete_map={True: "red", False: "gray"},
+            title=f"{selected_metric} comparison",
+        )
+        fig_peer.update_layout(showlegend=False)
+        st.plotly_chart(fig_peer, use_container_width=True)
+    else:
+        st.info("No peer snapshot data available for the selected date.")
 
-    fig_peer = px.bar(
-        compare_df,
-        x="Ticker",
-        y=metric_col,
-        color="is_focus",
-        color_discrete_map={True: "red", False: "gray"},
-        hover_data=["Holding_Company_Name"],
-    )
-
-    fig_peer.update_layout(
-        title=f"{selected_metric} comparison",
-        showlegend=False,
-    )
-
-    st.plotly_chart(fig_peer, use_container_width=True)
-
-    compare_hist_df = filtered_df[
-        filtered_df["Ticker"].isin(compare_tickers)
-    ].copy()
-
-    fig_ts = px.line(
-        compare_hist_df,
-        x="REPDTE",
-        y="score_rolling_4q",
-        color="Ticker",
-        line_dash="Ticker",
-        title="Rolling 4Q Score comparison over time",
-    )
-
-    st.plotly_chart(fig_ts, use_container_width=True)
-
-    compare_df["peer_avg"] = compare_df[metric_col].mean()
-
+    compare_hist_df = filtered_df[filtered_df["Ticker"].isin(compare_tickers)].copy()
+    if not compare_hist_df.empty:
+        history_metric = "score_rolling_4q" if "score_rolling_4q" in compare_hist_df.columns else "composite_score"
+        history_label = "Rolling 4Q Score" if history_metric == "score_rolling_4q" else "Composite Score"
+        fig_ts = px.line(
+            compare_hist_df,
+            x="REPDTE",
+            y=history_metric,
+            color="Ticker",
+            title=f"{history_label} comparison over time",
+        )
+        st.plotly_chart(fig_ts, use_container_width=True)
+    else:
+        st.info("No peer history data available.")
 
     with st.expander("Data notes"):
         st.markdown(
