@@ -17,4 +17,5 @@ data/processed/
 outputs/
 
 # notebooks
+notebooks/
 .ipynb_checkpoints/
