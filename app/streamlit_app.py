@@ -306,6 +306,85 @@ def main() -> None:
         else:
             st.info("Selected metric history unavailable.")
 
+# Peer comparison panel 
+
+    st.subheader("Peer comparison")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        focus_bank = st.selectbox(
+            "Select focus bank",
+            options=available_tickers,
+            key="focus_bank",
+        )
+
+    with col2:
+        peer_banks = st.multiselect(
+            "Select peers",
+            options=[t for t in available_tickers if t != focus_bank],
+            default=[t for t in available_tickers if t != focus_bank][:4],
+        )
+
+    compare_tickers = [focus_bank] + peer_banks
+
+    compare_df = snapshot_df[
+        snapshot_df["Ticker"].isin(compare_tickers)
+    ].copy()
+
+    compare_df["is_focus"] = compare_df["Ticker"] == focus_bank
+
+    metric_options = {
+    "ROA (%)": "roa_calc_pct_display",
+    "ROE (%)": "roe_calc_pct_display",
+    "Equity / Assets (%)": "equity_to_assets_pct_display",
+    "Loan / Deposit": "loan_to_deposit",
+    "Composite Score": "composite_score",
+    "Rolling 4Q Score": "score_rolling_4q",
+    }
+
+    selected_metric = st.radio(
+        "Comparison metric",
+        options=list(metric_options.keys()),
+        horizontal=True,
+    )
+
+    metric_col = metric_options[selected_metric]
+
+    fig_peer = px.bar(
+        compare_df,
+        x="Ticker",
+        y=metric_col,
+        color="is_focus",
+        color_discrete_map={True: "red", False: "gray"},
+        hover_data=["Holding_Company_Name"],
+    )
+
+    fig_peer.update_layout(
+        title=f"{selected_metric} comparison",
+        showlegend=False,
+    )
+
+    st.plotly_chart(fig_peer, use_container_width=True)
+
+    compare_hist_df = filtered_df[
+        filtered_df["Ticker"].isin(compare_tickers)
+    ].copy()
+
+    fig_ts = px.line(
+        compare_hist_df,
+        x="REPDTE",
+        y="score_rolling_4q",
+        color="Ticker",
+        line_dash="Ticker",
+        title="Rolling 4Q Score comparison over time",
+    )
+
+    st.plotly_chart(fig_ts, use_container_width=True)
+
+    compare_df["peer_avg"] = compare_df[metric_col].mean()
+
+
     with st.expander("Data notes"):
         st.markdown(
             """
