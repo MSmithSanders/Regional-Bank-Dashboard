@@ -8,8 +8,9 @@ def clean_fdic_columns(df: pd.DataFrame) -> pd.DataFrame:
     # Remove FDIC prefix
     df.columns = [col.replace("data.", "") for col in df.columns]
 
-    # Drop redundant ID column
+    # Drop redundant ID and score column
     df = df.drop(columns=["ID"], errors="ignore")
+    df = df.drop(columns=["score"], errors="ignore") 
 
     return df
 
