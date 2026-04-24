@@ -5,7 +5,7 @@ def compute_peer_metrics(df: pd.DataFrame, metrics: list) -> pd.DataFrame:
     df = df.copy()
 
     # Ensure date is datetime
-    df["REPDTE"] = pd.to_datetime(df["REPDTE"].astype(str), format="%Y%m%d")
+    df["REPDTE"] = pd.to_datetime(df["REPDTE"], errors="coerce")
 
     # --- Percentile ranks ---
     for metric in metrics:

@@ -38,6 +38,8 @@ def main() -> None:
         "NETINC",
         "ROA",
         "ROE",
+        "NCLNLS",
+        "NTLNLSQR"
     ]
 
     fdic_df = fetch_financial_history_for_control_table(
@@ -49,6 +51,8 @@ def main() -> None:
     fdic_df.to_csv(output_path, index=False)
 
     print(f"Saved {len(fdic_df)} rows to {output_path}")
+    print("Columns returned:")
+    print(sorted(fdic_df.columns.tolist()))
 
 
 if __name__ == "__main__":
