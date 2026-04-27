@@ -43,6 +43,8 @@ def load_data(path: Path) -> pd.DataFrame:
         "equity_to_assets",
         "roa_calc",
         "roe_calc",
+        "npl_ratio",
+        "chargeoff_ratio",
         "composite_score",
         "composite_rank",
         "score_rolling_4q",
@@ -52,7 +54,15 @@ def load_data(path: Path) -> pd.DataFrame:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    for col in ["ROA", "ROE", "roa_calc", "roe_calc", "equity_to_assets"]:
+    for col in [
+        "ROA",
+        "ROE",
+        "roa_calc",
+        "roe_calc",
+        "equity_to_assets",
+        "npl_ratio",
+        "chargeoff_ratio",
+    ]:
         if col in df.columns:
             df[f"{col}_pct_display"] = df[col] * 100
 
@@ -60,10 +70,6 @@ def load_data(path: Path) -> pd.DataFrame:
         df["assets_bil"] = df["ASSET"] / 1_000_000
 
     return df
-
-
-def latest_available_date(df: pd.DataFrame) -> pd.Timestamp:
-    return df["REPDTE"].dropna().max()
 
 
 def format_billions(series: pd.Series) -> pd.Series:
@@ -85,6 +91,8 @@ def build_latest_table(df: pd.DataFrame, as_of_date: pd.Timestamp) -> pd.DataFra
         "roe_calc",
         "equity_to_assets",
         "loan_to_deposit",
+        "npl_ratio",
+        "chargeoff_ratio",
         "ASSET",
     ]
     cols = [c for c in cols if c in latest_df.columns]
@@ -101,6 +109,8 @@ def build_latest_table(df: pd.DataFrame, as_of_date: pd.Timestamp) -> pd.DataFra
         "roe_calc": "ROE (%)",
         "equity_to_assets": "Equity / Assets (%)",
         "loan_to_deposit": "Loan / Deposit",
+        "npl_ratio": "NPL Ratio (%)",
+        "chargeoff_ratio": "Charge-off Ratio (%)",
     }
     latest_df = latest_df.rename(columns=rename_map)
 
@@ -109,7 +119,7 @@ def build_latest_table(df: pd.DataFrame, as_of_date: pd.Timestamp) -> pd.DataFra
     if "Rolling 4Q Score" in latest_df.columns:
         latest_df["Rolling 4Q Score"] = latest_df["Rolling 4Q Score"].round(3)
 
-    for col in ["ROA (%)", "ROE (%)", "Equity / Assets (%)"]:
+    for col in ["ROA (%)", "ROE (%)", "Equity / Assets (%)", "NPL Ratio (%)", "Charge-off Ratio (%)"]:
         if col in latest_df.columns:
             latest_df[col] = (latest_df[col] * 100).round(2)
 
@@ -129,16 +139,22 @@ def build_latest_table(df: pd.DataFrame, as_of_date: pd.Timestamp) -> pd.DataFra
 
 def build_component_table(bank_snapshot: pd.DataFrame) -> pd.DataFrame:
     component_map = [
-        ("ROA percentile", "roa_calc_pct", 0.4),
-        ("ROE percentile", "roe_calc_pct", 0.3),
-        ("Equity / Assets percentile", "equity_to_assets_pct", 0.2),
-        ("Loan / Deposit percentile", "loan_to_deposit_pct", 0.1),
+        ("ROA percentile", "roa_calc_pct", 0.30),
+        ("ROE percentile", "roe_calc_pct", 0.25),
+        ("Equity / Assets percentile", "equity_to_assets_pct", 0.15),
+        ("Loan / Deposit percentile", "loan_to_deposit_pct", 0.10),
+        ("NPL Ratio percentile", "npl_ratio_pct", 0.10),
+        ("Charge-off Ratio percentile", "chargeoff_ratio_pct", 0.10),
     ]
 
     rows = []
+    if bank_snapshot.empty:
+        return pd.DataFrame(rows)
+
+    row = bank_snapshot.iloc[0]
     for label, col, weight in component_map:
         if col in bank_snapshot.columns:
-            raw_value = bank_snapshot.iloc[0][col]
+            raw_value = row[col]
             weighted_value = raw_value * weight if pd.notna(raw_value) else np.nan
             rows.append(
                 {
@@ -249,7 +265,7 @@ def main() -> None:
         if not snapshot_df.empty and needed.issubset(snapshot_df.columns):
             scatter_df = snapshot_df.copy()
             scatter_df["asset_size"] = np.sqrt(scatter_df["ASSET"].clip(lower=1)) if "ASSET" in scatter_df.columns else 1
-            hover_cols = [c for c in ["Holding_Company_Name", "composite_score", "score_rolling_4q"] if c in scatter_df.columns]
+            hover_cols = [c for c in ["Holding_Company_Name", "composite_score", "score_rolling_4q", "npl_ratio_pct_display", "chargeoff_ratio_pct_display"] if c in scatter_df.columns]
             fig_scatter = px.scatter(
                 scatter_df,
                 x="equity_to_assets_pct_display",
@@ -283,15 +299,9 @@ def main() -> None:
             st.dataframe(component_table, use_container_width=True, hide_index=True)
 
             if "composite_score" in component_snapshot.columns:
-                st.metric(
-                    "Composite score",
-                    f"{component_snapshot.iloc[0]['composite_score']:.3f}",
-                )
+                st.metric("Composite score", f"{component_snapshot.iloc[0]['composite_score']:.3f}")
             if "score_rolling_4q" in component_snapshot.columns and pd.notna(component_snapshot.iloc[0]["score_rolling_4q"]):
-                st.metric(
-                    "Rolling 4Q score",
-                    f"{component_snapshot.iloc[0]['score_rolling_4q']:.3f}",
-                )
+                st.metric("Rolling 4Q score", f"{component_snapshot.iloc[0]['score_rolling_4q']:.3f}")
         else:
             st.info("No snapshot data available for the selected bank.")
 
@@ -360,7 +370,10 @@ def main() -> None:
                 "loan_to_deposit": "Loan / Deposit",
                 "equity_to_assets_pct_display": "Equity / Assets (%)",
                 "roe_calc_pct_display": "ROE (%)",
+                "npl_ratio_pct_display": "NPL Ratio (%)",
+                "chargeoff_ratio_pct_display": "Charge-off Ratio (%)",
             }
+            metric_labels = {k: v for k, v in metric_labels.items() if k in bank_df.columns}
             metric_choice = st.radio(
                 "Bank history metric",
                 options=list(metric_labels.keys()),
@@ -382,15 +395,10 @@ def main() -> None:
             st.info("Selected metric history unavailable.")
 
     st.subheader("Peer comparison")
-
     peer_col1, peer_col2 = st.columns(2)
 
     with peer_col1:
-        focus_bank = st.selectbox(
-            "Select focus bank",
-            options=available_tickers,
-            key="focus_bank",
-        )
+        focus_bank = st.selectbox("Select focus bank", options=available_tickers, key="focus_bank")
 
     with peer_col2:
         peer_banks = st.multiselect(
@@ -409,12 +417,12 @@ def main() -> None:
         "ROE (%)": "roe_calc_pct_display",
         "Equity / Assets (%)": "equity_to_assets_pct_display",
         "Loan / Deposit": "loan_to_deposit",
+        "NPL Ratio (%)": "npl_ratio_pct_display",
+        "Charge-off Ratio (%)": "chargeoff_ratio_pct_display",
         "Composite Score": "composite_score",
         "Rolling 4Q Score": "score_rolling_4q",
     }
-    available_metric_options = {
-        label: col for label, col in metric_options.items() if col in compare_df.columns
-    }
+    available_metric_options = {label: col for label, col in metric_options.items() if col in compare_df.columns}
 
     selected_metric = st.radio(
         "Comparison metric",
@@ -425,7 +433,8 @@ def main() -> None:
     metric_col = available_metric_options[selected_metric]
 
     if not compare_df.empty:
-        compare_df = compare_df.sort_values(metric_col, ascending=False)
+        ascending = selected_metric in ["NPL Ratio (%)", "Charge-off Ratio (%)"]
+        compare_df = compare_df.sort_values(metric_col, ascending=ascending)
         fig_peer = px.bar(
             compare_df,
             x="Ticker",
@@ -462,6 +471,7 @@ def main() -> None:
             - Composite score is based on peer-relative percentile scoring.
             - Rolling 4Q score reflects a trailing four-quarter average score.
             - Loan-to-deposit is directionally inverted in scoring so lower values rank better.
+            - NPL ratio and charge-off ratio are included as credit-risk inputs; lower values rank better.
             - The latest ranking table reflects the selected reporting date only.
             """
         )
