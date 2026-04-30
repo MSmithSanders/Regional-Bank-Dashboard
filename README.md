@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Regional Commercial Banking Dashboard
 
 ## Overview
@@ -72,3 +73,7 @@ This is an active project. The core data pipeline and scoring framework are impl
 ## Notes
 
 This project is intended for research and analytical purposes. It is designed to explore how structured data pipelines and consistent metric definitions can improve the comparability of financial institutions using publicly available data.
+=======
+# Regional-Bank-Dashboard
+Data pipeline and dashboard for analyzing U.S. regional banks using FDIC data
+>>>>>>> 42d0fca15072d4898de2daf20b4b1c7dde90ccb2
