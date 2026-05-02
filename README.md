@@ -32,11 +32,11 @@ The system processes FDIC call report data and transforms it into comparable met
 
 ## Project Structure
 
-/data # Raw and processed FDIC datasets
-/src # Data processing and metric construction logic
-/app # Streamlit dashboard application
-README.md
-requirements.txt
+- /data # Raw and processed FDIC datasets
+- /src # Data processing and metric construction logic
+- /app # Streamlit dashboard application
+- README.md
+- requirements.txt
 
 
 ---
